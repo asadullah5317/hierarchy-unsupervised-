@@ -16,29 +16,24 @@ def home():
 
 @app.route("/predict", methods=["POST"]) 
 def predict():
-    data = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return jsonify({"error": "Invalid or empty JSON"}), 400
 
-    # Expected keys (example: California housing dataset)
-    # Keep your training features and names the same
-    expected_features = [
-        "longitude",
-        "latitude",
-        "housing_median_age",
-        "total_rooms",
-        "total_bedrooms",
-        "population",
-        "households",
-        "median_income",
-        "ocean_proximity",  # categorical
-    ]
+    # Build DataFrame in one line (works for single object or list of objects)
+    df = pd.DataFrame(payload if isinstance(payload, list) else [payload])
 
-    # Create a single-row DataFrame. If you used a Pipeline during training,
-    # it will handle scaling/encoding for you.
-    row = {name: data.get(name) for name in expected_features}
-    df = pd.DataFrame([row])
+    # Optional: align columns if the model exposes feature names
+    if hasattr(model, "feature_names_in_"):
+        df = df.reindex(columns=list(model.feature_names_in_), fill_value=0)
 
-    prediction = model.predict(df)[0]
-    return jsonify({"prediction": float(prediction)})
+    preds = model.predict(df)
+
+    # Return single or batch format automatically
+    if isinstance(payload, list):
+        return jsonify({"predictions": [float(p) for p in preds]}), 200
+    else:
+        return jsonify({"prediction": float(preds[0])}), 200
 
 
 if __name__ == "__main__":
